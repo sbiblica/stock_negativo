@@ -6,6 +6,56 @@ from openerp.tools.translate import _
 import logging
  
 
+class pos_order(osv.osv):
+    _inherit = 'pos.order'
+
+    def _default_journal(self, cr, uid, context=None):
+        session_ids = self._default_session(cr, uid, context)
+        if session_ids:
+            session_record = self.pool.get('pos.session').browse(cr, uid, session_ids, context=context)
+            return session_record.config_id.journal_id and session_record.config_id.journal_id.id or False
+        return False
+
+    def _default_location(self, cr, uid, context=None):
+        session_ids = self._default_session(cr, uid, context)
+        if session_ids:
+            session_record = self.pool.get('pos.session').browse(cr, uid, session_ids, context=context)
+            return session_record.config_id.stock_location_id and session_record.config_id.stock_location_id.id or False
+        return False
+
+    _columns = {
+        'sale_journal': fields.many2one('account.journal', 'Sale Journal', readonly=True, states={'draft': [('readonly', False)]}),
+        'location_id': fields.many2one('stock.location', 'Location', readonly=True, states={'draft': [('readonly', False)]}),
+    }
+
+    _defaults = {
+        'sale_journal': _default_journal,
+        'location_id': _default_location,
+    }
+
+    def sbg_onchange_session(self, cr, uid, ids, session_id, context=None):
+
+        logging.warn('----')
+
+        result = {}
+        if not session_id:
+            return result
+
+        result['value'] = {}
+        session_record = self.pool.get('pos.session').browse(cr, uid, session_id, context=context)
+        if session_record.config_id.journal_id:
+            result['value']['sale_journal'] = session_record.config_id.journal_id.id
+
+        if session_record.config_id.stock_location_id:
+            result['value']['location_id'] = session_record.config_id.stock_location_id.id
+
+        return result
+ 
+
+pos_order()
+
+        
+
 class sbg_pos_order_line(osv.osv):
     _inherit = 'pos.order.line'
 
@@ -143,6 +193,7 @@ class sbg_pos_order_line(osv.osv):
  
 
 sbg_pos_order_line()
+
 
 class sbg_pos_session(osv.osv):
     _inherit = 'pos.session'

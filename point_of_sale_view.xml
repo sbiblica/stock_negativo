@@ -8,11 +8,21 @@
             <field name="inherit_id" ref="point_of_sale.view_pos_pos_form"/>
             <field name="arch" type="xml">
                 <data>
+                    <field name="session_id" position="replace">
+                        <field name="session_id" required="1" on_change="sbg_onchange_session(session_id, context)"/>
+                    </field>
                     <field name="product_id" position="replace">
                         <field name="product_id" on_change="sbg_onchange_product_id(parent.pricelist_id,product_id,qty,parent.partner_id, parent.location_id, context)"/>
                     </field>
                     <field name="qty" position="replace">
                         <field name="qty" on_change="sbg_onchange_qty(product_id, discount, qty, price_unit, parent.location_id, context)"/>
+                    </field>
+                    <field name="lines" position="after">
+                        <group col="4">
+                            <field name="add_disc"/>
+                            <field name="producto_descuento"/>
+                        </group>
+                        <button name="descuento_adicional" string="Descuento" states="draft,advance" type="object" />
                     </field>
                 </data>
             </field>
@@ -28,8 +38,6 @@
                 </button>
             </field>
         </record>
-
-
-
+ 
     </data>
 </openerp>
