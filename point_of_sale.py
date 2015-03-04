@@ -4,83 +4,7 @@ from openerp.osv import osv, fields
 import openerp.addons.decimal_precision
 from openerp.tools.translate import _
 import logging
-
-class pos_order(osv.osv):
-    _inherit = 'pos.order'
-
-    def _default_journal(self, cr, uid, context=None):
-        session_ids = self._default_session(cr, uid, context)
-        if session_ids:
-            session_record = self.pool.get('pos.session').browse(cr, uid, session_ids, context=context)
-            return session_record.config_id.journal_id and session_record.config_id.journal_id.id or False
-        return False
-
-    def _default_location(self, cr, uid, context=None):
-        session_ids = self._default_session(cr, uid, context)
-        if session_ids:
-            session_record = self.pool.get('pos.session').browse(cr, uid, session_ids, context=context)
-            return session_record.config_id.stock_location_id and session_record.config_id.stock_location_id.id or False
-        return False
-
-    _columns = {
-        'add_disc':fields.float('Descuento adicional(%)',digits=(4,2), readonly=True, states={'draft': [('readonly', False)]}),
-        'producto_descuento': fields.many2one('product.product', 'Descuento', domain=[('sale_ok', '=', True)]),
-        'sale_journal': fields.many2one('account.journal', 'Sale Journal', readonly=True, states={'draft': [('readonly', False)]}),
-        'location_id': fields.many2one('stock.location', 'Location', readonly=True, states={'draft': [('readonly', False)]}),
-    }
-
-    _defaults = {
-        'sale_journal': _default_journal,
-        'location_id': _default_location,
-    }
-
-    def sbg_onchange_session(self, cr, uid, ids, session_id, context=None):
-
-        logging.warn('----')
-
-        result = {}
-        if not session_id:
-            return result
-
-        result['value'] = {}
-        session_record = self.pool.get('pos.session').browse(cr, uid, session_id, context=context)
-        if session_record.config_id.journal_id:
-            result['value']['sale_journal'] = session_record.config_id.journal_id.id
-
-        if session_record.config_id.stock_location_id:
-            result['value']['location_id'] = session_record.config_id.stock_location_id.id
-
-        return result
-
-    def descuento_adicional(self, cr, uid, ids, *args):
-        """ Agrega un descuento al total
-        @return: True
-        """
-        if not len(ids):
-            return False
-
-        for order in self.browse(cr, uid, ids):
-
-            for l in order.lines:
-                if l.price_subtotal_incl < 0:
-                    raise osv.except_osv('Error', 'Ya se ha hecho un descuento')
-
-            if not order.producto_descuento:
-                raise osv.except_osv('Error', 'Debe escoger un descuento')
-
-            total = order.amount_total * order.add_disc * 0.01
-
-            self.pool.get('pos.order.line').create(cr, uid, {
-                'name':'Descuento',
-                'company_id': order.company_id.id,
-                'product_id': order.producto_descuento.id,
-                'qty': -total,
-                'order_id': order.id
-            })
-
-        return True
-
-pos_order()
+ 
 
 class sbg_pos_order_line(osv.osv):
     _inherit = 'pos.order.line'
@@ -216,13 +140,7 @@ class sbg_pos_order_line(osv.osv):
 
 
         return result
-
-    def _acceso_precio_descuento(self, cr, uid, context=None):
-        current_user = self.pool.get('res.users').browse(cr, uid, uid, context)
-        for group in current_user.groups_id:
-            if group.name == "SBG - Modificar precio y descuento":
-                return True
-        return False
+ 
 
 sbg_pos_order_line()
 
@@ -270,26 +188,4 @@ class sbg_pos_session(osv.osv):
         return True
 
 sbg_pos_session()
-
-# class pos_make_payment(osv.osv_memory):
-#     _inherit = 'pos.make.payment'
-#
-#     def view_init(self, cr, uid, fields_list, context=None):
-#         if context is None:
-#             context = {}
-#
-#         super(pos_make_payment, self).view_init(cr, uid, fields_list, context=context)
-#
-#         active_id = context and context.get('active_id', False) or False
-#
-#         if active_id:
-#             order = self.pool.get('pos.order').browse(cr, uid, active_id, context=context)
-#             if len(order.statement_ids) == 0:
-#                 for l in order.lines:
-#
-#                     virtual_available = self.pool.get('product.product').get_product_available(cr, uid, [l.product_id.id], context={'shop':order.shop_id.id, 'states': ('confirmed','waiting','assigned','done'), 'what': ('in', 'out')})[l.product_id.id]
-#
-#                     if (l.product_id.type=='product') and (virtual_available < l.qty) and (l.product_id.procure_method=='make_to_stock'):
-#                         raise osv.except_osv(_('Not enough stock !'),_('You plan to sell %.2f of [%s]%s but you only have %.2f available !') % (l.qty, l.product_id.default_code, l.product_id.name, virtual_available))
-#         return True
-# pos_make_payment()
+ 
