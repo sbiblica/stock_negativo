@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<openerp>
+    <data>
+
+
+        <record id="view_sbg_order_form4" model="ir.ui.view">
+            <field name="name">sbg.sale.order.form4</field>
+            <field name="model">sale.order</field>
+            <field name="priority" eval="10"/>
+            <field name="inherit_id" ref="sale.view_order_form"/>
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+                <field name="project_id" position="after">
+                    <field name="cotizacion" domain="[('type','=','sale')]"/>
+                </field>
+            </field>
+        </record>
+
+    </data>
+</openerp>

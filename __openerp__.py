@@ -30,5 +30,5 @@
 'description' : """\
 Desarrollo personalizado para control del stock negativo en el puno de venta:
 - Calendario de programacion TV""",
-'data' : ["point_of_sale_view.xml"],
+'data' : ["point_of_sale_view.xml" ],
 }

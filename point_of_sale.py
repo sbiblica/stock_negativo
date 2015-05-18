@@ -4,10 +4,43 @@ from openerp.osv import osv, fields
 import openerp.addons.decimal_precision
 from openerp.tools.translate import _
 import logging
- 
 
 class pos_order(osv.osv):
     _inherit = 'pos.order'
+
+    def validar_inventario(self, cr, uid, product_id, qty, context=None):
+        producto = self.pool.get('product.product').browse(cr, uid, product_id, context=context)
+
+        if producto.type=='product':
+
+            if producto.virtual_available < qty:
+                return producto
+
+        elif producto.type=='consu':
+
+            boms = self.pool.get('mrp.bom').search(cr, uid, [('type','=','phantom'), ('product_tmpl_id','=',producto.product_tmpl_id.id)], context=context)
+            for b in self.pool.get('mrp.bom').browse(cr, uid, boms, context=context):
+
+                for l in b.bom_line_ids:
+
+                    sub_producto = self.pool.get('product.product').browse(cr, uid, l.product_id.id, context=context)
+                    if sub_producto.virtual_available < l.product_qty * qty:
+                        return sub_producto
+
+        return None
+
+    def add_payment(self, cr, uid, order_id, data, context=None):
+        for o in self.browse(cr, uid, order_id, context=context):
+            context = context or {}
+            ctx = context.copy()
+            ctx.update({'location': o.location_id.id})
+
+            for l in o.lines:
+                producto = self.validar_inventario(cr, uid, l.product_id.id, l.qty, context=ctx)
+                if producto:
+                    raise osv.except_osv(_('Not enough stock !'), _('You plan to sell %.2f but you only have %.2f available !') % (l.qty, producto.virtual_available))
+
+        return super(pos_order, self).add_payment(cr, uid, order_id, data, context)
 
     def _default_journal(self, cr, uid, context=None):
         session_ids = self._default_session(cr, uid, context)
@@ -34,9 +67,6 @@ class pos_order(osv.osv):
     }
 
     def sbg_onchange_session(self, cr, uid, ids, session_id, context=None):
-
-        logging.warn('----')
-
         result = {}
         if not session_id:
             return result
@@ -50,11 +80,8 @@ class pos_order(osv.osv):
             result['value']['location_id'] = session_record.config_id.stock_location_id.id
 
         return result
- 
 
 pos_order()
-
-        
 
 class sbg_pos_order_line(osv.osv):
     _inherit = 'pos.order.line'
@@ -69,59 +96,15 @@ class sbg_pos_order_line(osv.osv):
         ctx = context.copy()
         ctx.update({'location': location_id})
 
-        producto = self.pool.get('product.product').browse(cr, uid, product_id, context=ctx)
-        if (producto.type=='product') and (producto.virtual_available < qty):
+        producto = self.pool.get('pos.order').validar_inventario(cr, uid, product_id, qty, context=ctx)
+
+        if producto:
             warning = {
                 'title': _('Not enough stock !'),
                 'message': _('You plan to sell %.2f but you only have %.2f available !') % (qty, producto.virtual_available)
             }
             result['warning'] = warning
             result['value']['qty'] = None
-        if (producto.type=='consu'):
-
-            domain = ' e.bodega = %s'
-            args = (location_id,)
-            domain += ' and p.id = %s'
-            args += (product_id,)
-            _warning = ''
-
-            cr.execute('Select e.bodega,b.complete_name,p.id product_lista,t.type,l.id '\
-                       'lista_id,l.code,l.product_tmpl_id,ll.product_id,ll.product_qty,e.existencia,pl.default_code '\
-	               'from mrp_bom l '\
- 	               'join product_template t '\
-	               'on l.product_tmpl_id = t.id '\
-	               'join mrp_bom_line ll '\
-	               'ON l.id = ll.bom_id '\
-                       'join "SBG_inventario_por_bodega_virtual" e '\
-                       'on ll.product_id = e.id '\
-                       'join product_product pl '\
-                       'on ll.product_id = pl.id '\
-                       'join product_product p '\
-                       'on p.product_tmpl_id = t.id '\
-                       'Join stock_location b '\
-                       'on b.id = e.bodega '\
-                       'where'+domain
-            , args)
-
-            for line in cr.dictfetchall():
-                _total_qty = line['product_qty']*qty
-                if _total_qty > line['existencia']:
-
-                    _warning = str(line['existencia']) +' of code '+str(line['default_code'])+' location '+str(line['complete_name'])
-
-                    warning = {
-
-                        'title': _('Not enough stock !'),
-                        'message': _('You plan to sell "%d" but you not have available "%s"') % (_total_qty,_warning)
-
-                    }
-
-                    result['warning'] = warning
-
-                    result['value']['qty'] = None
-
-
-
 
         return result
 
@@ -135,8 +118,9 @@ class sbg_pos_order_line(osv.osv):
         ctx = context.copy()
         ctx.update({'location': location_id})
 
-        producto = self.pool.get('product.product').browse(cr, uid, product_id, context=ctx)
-        if (producto.type=='product') and (producto.virtual_available < qty):
+        producto = self.pool.get('pos.order').validar_inventario(cr, uid, product_id, qty, context=ctx)
+
+        if producto:
             warning = {
                 'title': _('Not enough stock !'),
                 'message': _('You plan to sell %.2f but you only have %.2f available !') % (qty, producto.virtual_available)
@@ -144,56 +128,9 @@ class sbg_pos_order_line(osv.osv):
             result['warning'] = warning
             result['value']['qty'] = None
 
-        if (producto.type=='consu'):
-
-            domain = ' e.bodega = %s'
-            args = (location_id,)
-            domain += ' and p.id = %s'
-            args += (product_id,)
-            _warning = ''
-
-            cr.execute('Select e.bodega,b.complete_name,p.id product_lista,t.type,l.id '\
-                       'lista_id,l.code,l.product_tmpl_id,ll.product_id,ll.product_qty,e.existencia,pl.default_code '\
-	               'from mrp_bom l '\
- 	               'join product_template t '\
-	               'on l.product_tmpl_id = t.id '\
-	               'join mrp_bom_line ll '\
-	               'ON l.id = ll.bom_id '\
-                       'join "SBG_inventario_por_bodega_virtual" e '\
-                       'on ll.product_id = e.id '\
-                       'join product_product pl '\
-                       'on ll.product_id = pl.id '\
-                       'join product_product p '\
-                       'on p.product_tmpl_id = t.id '\
-                       'Join stock_location b '\
-                       'on b.id = e.bodega '\
-                       'where'+domain
-            , args)
-
-            for line in cr.dictfetchall():
-                _total_qty = line['product_qty']*qty
-                if _total_qty > line['existencia']:
-
-                    _warning = str(line['existencia']) +' of code '+str(line['default_code'])+' location '+str(line['complete_name'])
-
-                    warning = {
-
-                        'title': _('Not enough stock !'),
-                        'message': _('You plan to sell "%d" but you not have available "%s"') % (_total_qty,_warning)
-
-                    }
-
-                    result['warning'] = warning
-
-                    result['value']['qty'] = None
-
-
-
         return result
- 
 
 sbg_pos_order_line()
-
 
 class sbg_pos_session(osv.osv):
     _inherit = 'pos.session'
@@ -239,4 +176,3 @@ class sbg_pos_session(osv.osv):
         return True
 
 sbg_pos_session()
- 
